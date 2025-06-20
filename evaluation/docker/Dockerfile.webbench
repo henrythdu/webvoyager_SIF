@@ -1,0 +1,51 @@
+
+FROM mcr.microsoft.com/playwright/python:v1.45.0-jammy
+
+# Set a consistent working directory for our application files
+WORKDIR /app
+
+# --- Install Node.js (LTS version 20.x) ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add NodeSource GPG key and repository
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+
+# Update apt cache and install Node.js (LTS version 20.x)
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Yarn globally (common for many WebBench projects)
+RUN npm install -g yarn
+
+# Install commonly used global npm packages that might be required by WebBench projects
+# Add others as you discover them during WebBench project runs (e.g., webpack, vite, typescript)
+RUN npm install -g typescript @playwright/test
+
+# --- User Setup (Good Practice for Security) ---
+# The Playwright base images often run as root by default.
+# It's safer to switch to a non-root user for executing application code.
+# The 'pwuser' is often available or easily created in Playwright images.
+# Let's create one if not existing, or switch to 'pwuser' if it's there.
+ARG USERNAME=pwuser
+ARG UID=1000
+ARG GID=1000
+
+# Check if pwuser exists, if not, create it.
+RUN id -u $USERNAME &>/dev/null || (\
+    groupadd --gid $GID $USERNAME \
+    && useradd --uid $UID --gid $GID -m $USERNAME \
+    && apt-get update && apt-get install -y sudo \
+    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME \
+    && rm -rf /var/lib/apt/lists/* \
+)
+
+# Switch to the non-root user
+USER $USERNAME
+
+# --- Optional: Default command (useful for debugging, but we'll run specific commands) ---
+CMD ["/bin/bash"]
